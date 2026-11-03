@@ -82,11 +82,13 @@ for f in frpc-qnap-manager frpc; do
 	fi
 done
 
-# 架构必须与包的 arch 对得上，否则装到 NAS 上是 exec format error
+# 架构必须与包的 arch 对得上，否则装到 NAS 上是 exec format error。
+# 注意 GNU file 对 Go 产物的措辞：linux/arm64 → "ARM aarch64"，linux/amd64 → "x86-64"，
+# 大小写不统一，所以统一转小写再匹配。
 expect_machine() {
 	case "$1" in
-		arm_64) echo "AArch64" ;;
-		x86_64) echo "X86-64" ;;
+		arm_64) echo "aarch64" ;;
+		x86_64) echo "x86-64" ;;
 		*) echo "" ;;
 	esac
 }
@@ -95,11 +97,12 @@ if command -v file >/dev/null 2>&1; then
 	for f in frpc-qnap-manager frpc; do
 		[ -f "${ARCH}/${f}" ] || continue
 		desc=$(file -b "${ARCH}/${f}")
-		case "${desc}" in
-			*ELF*) : ;;
+		low=$(printf '%s' "${desc}" | tr 'A-Z' 'a-z')
+		case "${low}" in
+			*elf*) : ;;
 			*) bad "${ARCH}/${f} 不是 ELF（${desc}）"; continue ;;
 		esac
-		case "${desc}" in
+		case "${low}" in
 			*"${want}"*) ok "${ARCH}/${f} 架构匹配（${want}）" ;;
 			*) bad "${ARCH}/${f} 架构不匹配，期望 ${want}，实际：${desc}" ;;
 		esac
