@@ -120,9 +120,40 @@ sudo sh frpc-qnap_1.0.1_arm_64.qpkg
 | 现象 | 结论 |
 |---|---|
 | demo 也装不上 | 与我们的包无关：签名开关（第 1 条）或 NAS 环境（第 4 条） |
-| demo 能装、frpc-qnap 装不上 | 问题在我们的元数据或包内容，把第 5 条的终端输出发回来 |
+| demo 能装、frpc-qnap 装不上 | 问题在我们的元数据或包内容，进 §6.1 的阶梯 |
 
 装完 demo 可以直接在 App Center 卸载，无残留。
+
+### 6.1 诊断包阶梯（demo 能装、我们的不能装时用）
+
+已实测：`control-demo` 能装、`frpc-qnap` 不能装，说明签名策略、文件完整性、架构都已排除，
+差异只剩「元数据字段」和「载荷内容」两块。下面四个变体把这两块拆开，按顺序试，**试到能装就停**：
+
+| 顺序 | 变体 | 与正式包的差异 | 装上了说明什么 |
+|---|---|---|---|
+| 1 | `dist/diag/C1/` | 仅删除 `QPKG_VOLUME_SELECT="3"` | **这就是根因**（该字段值 3 在 QDK 官方 GitBook 里标注为 not ready） |
+| 2 | `dist/diag/C2/` | C1 + `QPKG_WEBUI` 补尾斜杠 `/frpc-qnap/` | 根因是 WEBUI 路径格式 |
+| 3 | `dist/diag/A/` | 元数据精简成模板同款 6 个字段，载荷不变 | 元数据里还有其他字段不被接受 |
+| 4 | `dist/diag/B/` | A 再去掉图标 | 图标（PNG 改名成 .gif）是根因 |
+
+全都不行 → 问题在载荷（22 MB 二进制或 `config/` 目录），与元数据无关。
+
+> **安装时不要改文件名**。App Center 从文件名解析 `<名字>_<版本>_<架构>`，
+> 改成 `diag-C1.qpkg` 会让它认不出架构。每个变体都放在独立目录里，文件名都是
+> `frpc-qnap_1.0.2_arm_64.qpkg`，直接用原文件名安装。
+
+四个变体都由 `qbuild` 用同一套 QDK 重新生成，内部版本号 1.0.2，`QPKG_NAME` 仍是 `frpc-qnap`，
+装成功后可以正常在 App Center 卸载。
+
+复现命令（在 WSL 里，以 C1 为例）：
+
+```bash
+cp -a ~/frpc-qnap/package /tmp/C1 && cd /tmp/C1
+sed -i '/^QPKG_VOLUME_SELECT=/d' qpkg.cfg
+find . -type d -exec chmod 755 {} +; find . -type f -exec chmod 644 {} +
+chmod 755 arm_64/frpc arm_64/frpc-qnap-manager shared/frpc-qnap.sh
+qbuild --build-arch arm_64 --build-version 1.0.2 --build-dir /tmp/out
+```
 
 ---
 
