@@ -45,6 +45,7 @@ internal/server/           HTTP 服务、会话认证、REST API、QTS 前缀兼
 internal/webui/assets/     前端（原生 ES 模块，无构建步骤）
 package/                   QPKG 打包源（qpkg.cfg、安装钩子、启停脚本、图标、默认配置）
 scripts/                   fetch-frp.sh / build-qpkg.sh / e2e.sh / make-icon.py
+                           preflight-qpkg.sh（打包源预检）/ wsl-setup.sh（WSL 一键装环境）
 docs/                      方案评估文档
 ```
 
@@ -68,13 +69,26 @@ make arm64        # 交叉编译 manager + 下载并校验 frpc（linux/arm64）
 make qpkg         # 需要 Linux + QDK，产出 dist/frpc-qnap_*.qpkg
 ```
 
-`make qpkg` 只能在 Linux 上跑（QNAP QDK 只提供 Linux x86_64 版）。WSL / 虚拟机里：
+`make qpkg` 只能在 Linux 上跑（QNAP QDK 只提供 Linux x86_64 版）。WSL 里最短路径：
 
 ```bash
+make setup        # 装依赖（rsync/file/make）+ Go(>=1.22) + QDK 2.5.3，重复执行也安全
+make arm64        # 交叉编译 manager + 下载 frpc（linux/arm64）
+make check        # 可选：只做打包源预检，不调 qbuild
+make qpkg         # 预检 + qbuild → dist/frpc-qnap_*.qpkg
+```
+
+不想用脚本时，等价于：
+
+```bash
+sudo apt install -y rsync curl file make
 wget https://github.com/qnap-dev/QDK/releases/download/v2.5.3/qdk_2.5.3_amd64.deb
 sudo apt install ./qdk_2.5.3_amd64.deb
 make qpkg
 ```
+
+> 依赖 `rsync` 是硬要求：qbuild 用它组装数据包，Ubuntu 最小安装不预装。
+> 仓库建议放在 WSL 家目录（`~/frpc-qnap`）而不是 `/mnt/c`，9p 文件系统会显著拖慢编译与打包。
 
 ## 在 NAS 上安装
 

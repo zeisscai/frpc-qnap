@@ -1,7 +1,7 @@
 # 交接说明（HANDOFF）
 
 > 给接手者的第一份文件。读完这页再动代码。
-> 最后更新：2026-11-03 · 最后提交：`4eeb700`
+> 最后更新：2026-11-03 · 最后提交：`4eeb700` · 已在 WSL 侧做了一轮静态验证（见 §2.1）
 
 ---
 
@@ -13,10 +13,12 @@
 - 目标架构：`arm_64`（用户只有 ARM 机型）；`x86_64` 构建链已就绪但未实机验证
 - 当前状态：**原型可运行、已通过 23 项自动化回归，但还没在真 NAS 上装过**
 
-**两件没有任何证据的事**（接手后优先消掉）：
+**还缺证据的两件事**（接手后优先消掉）：
 
-1. `qbuild` 打包从未真正执行过（开发机是 macOS，没有 Linux/QDK）
+1. `qbuild` 从未真正执行过。上一轮预计「目录约定可能报错」，这轮已确认**确实会报错并已修**
+   （`QPKG_CONFIG` 默认文件必须放 `package/shared/config/`，见 §7 第 9 条），但**实跑仍未做**
 2. QTS 反向代理的前缀行为没实测过（后端两种都兼容，但没验证过）
+
 
 ---
 
@@ -24,16 +26,41 @@
 
 | 能做 | 怎么做 |
 |---|---|
-| 跑 Go 构建 / 测试 | WSL Ubuntu-24.04（用户已有）。Windows 原生也能 `go build`，但路径和脚本是 POSIX 风格 |
+| 跑 Go 构建 / 测试 | WSL Ubuntu-24.04（用户已有）。Windows 原生也能 `go build` / `go vet`（需 `GOCACHE`，见下） |
 | 出 `.qpkg` | **只能 WSL**：装 QDK（仅 Linux x86_64 deb），`make qpkg` |
 | 改前端 | 直接改 `internal/webui/assets/`，`make run` 后刷新即生效，无需构建 |
 | 连 NAS 调试 | WSL 里 `ssh admin@NAS`；或 Windows 用 WinSCP/PuTTY |
 
+### 2.1 WSL 侧三步（本轮新增，已静态验证、未实跑）
+
+```bash
+# 0. 建议放在 WSL 家目录，别放 /mnt/c —— 9p 文件系统会让 go build / rsync 慢好几倍
+cp -a /mnt/c/Users/chn/Desktop/workbuddy/frpc-qnap ~/frpc-qnap && cd ~/frpc-qnap
+
+# 1. 一次装好依赖 + Go(>=1.22) + QDK（幂等；--no-qdk 只装依赖与 Go）
+make setup
+
+# 2. 交叉编译 + 打包
+make arm64
+make qpkg        # 内部先跑 scripts/preflight-qpkg.sh，再调 qbuild，产物在 dist/
+```
+
+`make check` 只跑打包源预检（不调 qbuild），Windows 的 Git Bash 里也能跑，会明确告诉你缺什么。
+
 注意：
+
 - 仓库放在 `/mnt/d/...` 时 WSL 的 IO 很慢，建议 clone 到 WSL 家目录（`~/frpc-qnap`）
 - Windows 的 `make` 可能是 Git Bash 的旧版本，**统一在 WSL 里执行 Makefile**
 - 打包出来的 `.qpkg` 在 WSL 的 `dist/` 下，用 Windows 资源管理器走 `\\wsl$\Ubuntu-24.04\home\...` 取
 - WSL2 里 `make run` 后，Windows 浏览器直接开 `http://localhost:7911` 即可（WSL2 会自动转发回环端口）；若不通，用 `hostname -I` 拿 WSL 的 IP 再访问
+- 如果已经在 Windows 上编好了 `package/arm_64/`（manager + frpc），WSL 里可以只装 QDK + rsync 直接 `make qpkg`，省掉 Go
+- Windows 原生跑 `go`：需要 `export GOCACHE=/tmp/gocache`（本机 `%LocalAppData%` 在 Git Bash 里不可见，否则报 `build cache is required`）
+
+### 2.2 已知的环境级阻塞
+
+`wsl.exe` 若被本机安全策略拦截（WorkBuddy → Security Center → Command Security → Program Blacklist），
+助手无法代跑任何 WSL 命令，只能由你在终端里执行上面的命令。QDK 相关的一切都要在这一步之后才能继续。
+
 
 ---
 
@@ -54,6 +81,8 @@
 | `package/package_routines` | 安装/升级/卸载钩子 | 改安装期行为 |
 | `package/shared/frpc-qnap.sh` | QTS 调用的启停脚本（只管 manager） | 改启停 |
 | `scripts/e2e.sh` | 端到端回归（23 项断言） | **改完任何逻辑都跑一遍** |
+| `scripts/preflight-qpkg.sh` | 打包源预检（依赖/元数据/架构/`QPKG_CONFIG` 路径/图标） | 改 `qpkg.cfg`、动 `package/` 布局时扩一条检查 |
+| `scripts/wsl-setup.sh` | WSL/Linux 一键装依赖 + Go + QDK | QDK 或 Go 版本变化时改 |
 | `docs/frpc-qnap-方案评估.md` | 技术方案与可行性论证（§12 是实现状态） | 决策变更时更新 |
 
 ---
@@ -65,14 +94,16 @@
 - [x] Go 管理器（配置/校验/TOML/守护/API/认证/CSRF）
 - [x] 前端四页（概览 / 隧道 / 设置 / 日志），字段对齐 luci-app-frpc
 - [x] QPKG 打包源（qpkg.cfg、钩子、启停脚本、图标、默认配置）
-- [x] 交叉编译 ARM64（manager 6.3 MB + frpc 14 MB，静态链接）
+- [x] 交叉编译 ARM64（manager ≈6.5 MB / Go 1.26 + frpc ≈15 MB，均为静态 ELF aarch64）
 - [x] e2e 回归脚本，连续两轮 23/23 通过
 - [x] UI 用无头 Chromium 实际登录验证，控制台零报错
+- [x] 打包链静态验证：qbuild 参数与目录约定逐条对照 QDK 2.5.3 源码确认，修掉一处会让首次打包必定失败的 `QPKG_CONFIG` 路径问题
+- [x] `make setup` / `make check`：WSL 环境一键装、打包源预检（见 `docs/records/2026-11-03-wsl-env.md`）
 
 ### 未完成（按优先级）
 
-1. **真机 Phase 0**（见第 5 节）—— 阻塞一切发布
-2. `make qpkg` 首次真机打包验证（qbuild 目录约定可能报错）
+1. **`make qpkg` 实跑**（本轮环境无法执行 WSL）—— 出包前的一切静态检查都已通过
+2. **真机 Phase 0**（见第 5 节）—— 阻塞一切发布
 3. 管理员改密页面（后端 PBKDF2 已就绪，缺 UI；口令只能靠 `initial-password.txt`）
 4. `[[visitors]]` 支持（stcp/xtcp/sudp 的**访问端**，目前只支持服务端）
 5. manager 监听端口（7911）冲突时自动顺延（现在只有 frpc 管理端口会顺延）
@@ -80,6 +111,24 @@
 ---
 
 ## 5. 下一步任务（含验收标准）
+
+### 任务 0：首次真正出包（先做，10 分钟内）
+
+```bash
+cp -a /mnt/c/Users/chn/Desktop/workbuddy/frpc-qnap ~/frpc-qnap && cd ~/frpc-qnap
+make setup      # 装 rsync/curl/file/make + Go(>=1.22) + QDK 2.5.3
+make arm64
+make qpkg
+```
+
+| 验收项 | 通过标准 |
+|---|---|
+| `qbuild` 不再报 `no such file; check your QPKG_CONFIG settings` | 上一轮的阻断点已修，应不再出现 |
+| 产物存在 | `ls dist/` 有 `frpc-qnap_1.0.0_arm_64.qpkg` |
+| 包内结构正确 | `qbuild --extract dist/*.qpkg /tmp/x` 后 `/tmp/x` 下有 `frpc`、`frpc-qnap-manager`、`frpc-qnap.sh`、`config/manager.json` |
+| 可安装性 | 解出的 `package_routines`、`frpc-qnap.sh` 用 `cat -A` 看无 `^M`（CRLF） |
+
+若 `qbuild` 报其他错，把完整输出贴回 `docs/records/2026-11-03-wsl-env.md` §6，并把结论补进第 7 节。
 
 ### 任务 1：真机 Phase 0（最高优先级）
 
@@ -133,8 +182,13 @@
 4. **frpc 状态值不止 `error`**，还有 `start error`（remotePort 被占、frps 没配 vhost）。统计用 `strings.Contains(status, "error")`，UI 同理。
 5. **macOS AirPlay 占用 7000 端口**，本地起 frps 会静默失败。e2e 已改用 17000 / 28080 / 28022。
 6. **e2e 与本机演示环境抢远程端口**：演示配置占着 18080，e2e 必须用不同端口，否则 `port unavailable`。
-7. **QDK 的图标目录是 `package/icons/`，不是 `package/shared/icons/`**；`package/config/` 放升级要保留的默认配置。
+7. **QDK 的图标目录是 `package/icons/`，不是 `package/shared/icons/`**；升级要保留的默认配置放 `package/shared/config/`（原因见第 9 条，别放回 `package/config/`）。
 8. **`http.ServeMux` 的 `GET /api/xxx` 模式要 Go ≥ 1.22**，`r.PathValue` 同理，`go.mod` 已锁 1.22。
+9. **`QPKG_CONFIG` 写相对嵌套路径时，默认文件必须放在 `package/shared/config/`**。qbuild 2.5.3 的 `add_config_data()` 对 `config/manager.json` 这种相对路径，只认「数据包里已经有这个文件」（即来自 `shared/` 或 `<arch>/`）或 `package/config/config/manager.json`；放 `package/config/manager.json` 会直接 `exit 1`，报错只有一句 `no such file; check your QPKG_CONFIG settings`。`scripts/preflight-qpkg.sh` 现在会提前拦住。
+10. **`QPKG_CONFIG` 只写单层文件名时语义完全不同**：`QPKG_CONFIG="myApp.conf"` 表示 `package/config/myApp.conf` 会被拷到**安装根目录**（不是 root 下的 config/）。
+11. **CRLF 会让 QTS 装不上包**：`package_routines` 与 `shared/*.sh` 由 NAS 上的 busybox sh 执行，带 `\r` 会报 `not found` / 语法错。仓库已加 `.gitattributes`（`text=auto eol=lf`），别删；在 Windows 上手工改过脚本后可用 `git check-attr -a <file>` 确认。
+12. **WSL 最小安装不自带 `rsync`**，而 qbuild 用 rsync 组装数据包，缺了会在打包中途挂。`make setup` 会装。
+13. **`build-qpkg.sh` 旧版提示「请先运行 make arm」是个错误目标名**（`${ARCH%%_*}` 把 `arm_64` 截成 `arm`）。已改成显式映射。
 
 ---
 
@@ -153,9 +207,11 @@ FRP_DIR=/path/to/frp_x.y.z_<os>_<arch> bash scripts/e2e.sh
 make arm64
 make x86_64
 
-# 打包（仅 Linux + QDK）
-sudo apt install ./qdk_2.5.3_amd64.deb
-make qpkg                     # → dist/frpc-qnap_1.0.0_arm_64.qpkg
+# 打包（仅 Linux + QDK；WSL 里跑）
+make setup                    # 装依赖 + Go(>=1.22) + QDK 2.5.3，幂等
+make check                    # 只做打包源预检，不调 qbuild
+make arm64
+make qpkg                     # 预检 + qbuild → dist/frpc-qnap_1.0.0_arm_64.qpkg
 ```
 
 `FRP_DIR` 必须同时含 `frpc` 和 `frps`（e2e 要起服务端）。
@@ -208,7 +264,8 @@ make qpkg                     # → dist/frpc-qnap_1.0.0_arm_64.qpkg
 ## 12. 相关文档
 
 - `docs/frpc-qnap-方案评估.md` —— 可行性论证、QTS 集成机制、风险清单、§12 实现状态
-- `docs/records/2026-11-03-worklog.md` —— 本次开发的时间线、决策依据、验证数据
+- `docs/records/2026-11-03-worklog.md` —— 第一轮的开发时间线、决策依据、验证数据
+- `docs/records/2026-11-03-wsl-env.md` —— 第二轮：打包链静态验证、`QPKG_CONFIG` 缺陷的证据与复现、WSL 环境坑
 - `docs/records/memory-2026-11-03.md` —— 开发过程中的原始工作记忆（按阶段追加，未整理）
 - `README.md` —— 面向使用者的构建与安装说明
 - `handoff/` —— 源码快照压缩包（离线备份，非必需）

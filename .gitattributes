@@ -1,0 +1,18 @@
+# 统一行尾：仓库内所有文本文件一律 LF。
+#
+# 原因：本项目在 Windows 上开发、在 WSL 的 Linux 里打包。Windows 的 git 常见
+# core.autocrlf=true，会把 *.sh / package_routines 检出成 CRLF，进 WSL 执行时
+# 报 `bad interpreter: /bin/sh^M`；package_routines 与 shared/*.sh 更严重——
+# 它们要拷进 QPKG、由 NAS 上的 QTS 用 busybox sh 执行，CRLF 会直接让安装失败。
+# 这里的 eol=lf 优先级高于 core.autocrlf，任何平台检出都是 LF。
+* text=auto eol=lf
+
+# 二进制：不参与行尾转换与文本 diff
+*.png binary
+*.gif binary
+*.jpg binary
+*.ico binary
+*.zip binary
+*.gz binary
+*.xz binary
+*.qpkg binary
