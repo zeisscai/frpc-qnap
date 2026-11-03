@@ -11,7 +11,7 @@
 
 - 上游内核：frp v0.71.1，**不修改源码**，直接用官方 release 二进制
 - 目标架构：`arm_64`（用户只有 ARM 机型）；`x86_64` 构建链已就绪但未实机验证
-- 当前状态：**已产出可分发 QPKG（`dist/frpc-qnap_1.0.0_arm_64.qpkg`，8.71 MB），但还没在真 NAS 上装过**
+- 当前状态：**已产出可分发 QPKG（`dist/frpc-qnap_1.0.1_arm_64.qpkg`，8.71 MB），但还没在真 NAS 上装过**
 
 **只剩一件事没有任何证据：装到真 NAS 上的表现**（HANDOFF §5 Phase 0 六条），其中最关键的是
 **QTS 反向代理会不会剥离 `/frpc-qnap` 前缀**——后端两种都兼容，但没实测过。
@@ -97,7 +97,7 @@ make qpkg        # 内部先跑 scripts/preflight-qpkg.sh，再调 qbuild，产�
 - [x] e2e 回归脚本，连续两轮 23/23 通过
 - [x] UI 用无头 Chromium 实际登录验证，控制台零报错
 - [x] 打包链静态验证：qbuild 参数与目录约定逐条对照 QDK 2.5.3 源码确认，修掉一处会让首次打包必定失败的 `QPKG_CONFIG` 路径问题
-- [x] **`make qpkg` 实跑成功**：WSL Ubuntu 24.04 + QDK 2.5.3 产出 `dist/frpc-qnap_1.0.0_arm_64.qpkg`（8 705 163 B，md5 `4bb440639025731240fcfa42a6a72630`），包结构/权限/尾部元数据均已解包核对
+- [x] **`make qpkg` 实跑成功**：WSL Ubuntu 24.04 + QDK 2.5.3 产出 `dist/frpc-qnap_1.0.1_arm_64.qpkg`（8 705 176 B，md5 `f91945c48a12fbc77f845fdb209b9637`），包结构/权限/尾部元数据均已解包核对
 - [x] e2e 回归在 WSL 里复跑：**23/23 通过**
 - [x] `make setup` / `make check`：WSL 环境一键装、打包源预检
 
@@ -128,7 +128,7 @@ make qpkg       # 预检 + qbuild
 | 验收项 | 结果 |
 |---|---|
 | `qbuild` 通过 | ✅ 不再出现 `no such file; check your QPKG_CONFIG settings`（该阻断点已在上一轮修掉） |
-| 产物 | ✅ `dist/frpc-qnap_1.0.0_arm_64.qpkg`，8 705 163 B，md5 `4bb4406390…2630` |
+| 产物 | ✅ `dist/frpc-qnap_1.0.1_arm_64.qpkg`，8 705 176 B，md5 `f91945c48a12…9637` |
 | 包内结构 | ✅ `frpc` / `frpc-qnap-manager` / `frpc-qnap.sh` / `config/manager.json` / `config/state.json` / `.qpkg_icon.gif` |
 | 权限 | ✅ 二进制与 `frpc-qnap.sh` 755，配置与许可 644，目录 755（打包时归一化，不继承检出权限） |
 | 编码 | ✅ `package_routines`、`frpc-qnap.sh` 均为 LF |
@@ -222,7 +222,7 @@ make x86_64
 make setup                    # 装依赖 + Go(>=1.22) + QDK 2.5.3，幂等
 make check                    # 只做打包源预检，不调 qbuild
 make arm64
-make qpkg                     # 预检 + qbuild → dist/frpc-qnap_1.0.0_arm_64.qpkg
+make qpkg                     # 预检 + qbuild → dist/frpc-qnap_1.0.1_arm_64.qpkg
 ```
 
 `FRP_DIR` 必须同时含 `frpc` 和 `frps`（e2e 要起服务端）。
@@ -275,6 +275,7 @@ make qpkg                     # 预检 + qbuild → dist/frpc-qnap_1.0.0_arm_64.
 ## 12. 相关文档
 
 - `docs/frpc-qnap-方案评估.md` —— 可行性论证、QTS 集成机制、风险清单、§12 实现状态
+- `docs/troubleshooting-install.md` —— **装不上时先看这里**：无提示无日志的排查阶梯、安装轨迹判据、对照实验
 - `docs/records/2026-11-03-worklog.md` —— 第一轮的开发时间线、决策依据、验证数据
 - `docs/records/2026-11-03-wsl-env.md` —— 第二轮：打包链静态验证、`QPKG_CONFIG` 缺陷的证据与复现、WSL 环境坑
 - `docs/records/memory-2026-11-03.md` —— 开发过程中的原始工作记忆（按阶段追加，未整理）

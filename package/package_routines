@@ -3,21 +3,34 @@
 ######################################################################
 
 pkg_init() {
-	:
+	# 安装轨迹。作用：区分两种失败——
+	#   A. 文件存在 → 已经进入 QPKG 安装流程，失败原因在钩子或解包；
+	#   B. 文件不存在 → App Center 在前置校验就拒收了（签名策略、架构声明、文件完整性），
+	#      这种情况下 QTS 常常只给一句「无法安装程序包」，系统日志也可能为空。
+	{
+		echo "== $(date '+%Y-%m-%d %H:%M:%S') frpc-qnap pkg_init"
+		echo "   model    : $(/sbin/getcfg System Model -d unknown 2>/dev/null)"
+		echo "   uname -m : $(uname -m 2>/dev/null)"
+		echo "   kernel   : $(uname -r 2>/dev/null)"
+		echo "   qts      : $(/sbin/getcfg System Version -d unknown 2>/dev/null)"
+		echo "   arch dir : ${SYS_QPKG_DIR:-unset}"
+	} >> /tmp/frpc-qnap-install.log 2>&1
+	return 0
 }
 
 # 安装前检查：架构必须匹配，避免用户装错包。
 pkg_check_requirement() {
 	ARCH="$(uname -m)"
 	case "${ARCH}" in
-		aarch64)
+		aarch64|armv8*)
+			return 0
 			;;
 		*)
-			err_log "frpc-qnap: 此安装包仅支持 ARM64 (aarch64) 机型，当前架构为 ${ARCH}。"
+			# 消息里带上实测值，便于判断是「装错包」还是「QTS 报告的架构名不常见」。
+			err_log "frpc-qnap: 需要 ARM64 (aarch64) 机型，当前 uname -m = ${ARCH}。若这是 ARM64 机型，请把该值反馈给维护者。"
 			return 1
 			;;
 	esac
-	return 0
 }
 
 pkg_pre_install() {

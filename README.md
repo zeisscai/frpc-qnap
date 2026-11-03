@@ -96,9 +96,9 @@ make qpkg
 
 | 项 | 值 |
 |---|---|
-| 文件 | `dist/frpc-qnap_1.0.0_arm_64.qpkg` |
-| 大小 | 8 705 163 字节 |
-| md5 | `4bb440639025731240fcfa42a6a72630` |
+| 文件 | `dist/frpc-qnap_1.0.1_arm_64.qpkg` |
+| 大小 | 8 705 176 字节 |
+| md5 | `f91945c48a12fbc77f845fdb209b9637` |
 
 包内结构：`frpc`、`frpc-qnap-manager`、`frpc-qnap.sh`、`config/manager.json`、`config/state.json`、`.qpkg_icon.gif`
 （前端已内嵌进 manager，包里不再有 `web/` 副本）。
@@ -119,6 +119,10 @@ cat /share/CACHEDEV1_DATA/.qpkg/frpc-qnap/initial-password.txt
 （ZFS 卷机型路径为 `/share/ZFS1_DATA/.qpkg/frpc-qnap/`）
 
 进去先填服务器地址、端口、Token，保存后 frpc 自动启动。
+
+如果手动安装只弹一句「无法安装程序包」、没有其他提示、日志里也找不到东西，
+按 [`docs/troubleshooting-install.md`](docs/troubleshooting-install.md) 的阶梯走一遍
+（最常见原因是第 1 步那个签名开关没勾；文档里还有用于区分「前置拒绝」与「安装期失败」的判据）。
 
 ## 配置是怎么生效的
 
