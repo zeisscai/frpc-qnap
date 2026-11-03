@@ -1,179 +1,134 @@
 # frpc-qnap
 
-> **接手开发？先读 [`docs/HANDOFF.md`](docs/HANDOFF.md)** —— 环境要求、代码地图、当前进度、下一步任务都在那里。
-> 开发过程与决策依据见 [`docs/records/2026-11-03-worklog.md`](docs/records/2026-11-03-worklog.md)。
+把 [frp](https://github.com/fatedier/frp) 的内网穿透客户端搬进 QNAP NAS：**管理界面就在 NAS 网页里**，不用额外开放端口，也不用碰命令行。
 
-QNAP 原生的 frpc 客户端：**管理界面直接嵌在 NAS 网页端里**，不额外开放端口。
+装好之后，从 QTS 主菜单点开应用就能看到管理窗口，在窗口里填服务器地址、加几条隧道、看连接状态——和用其他 QTS 应用没什么区别。
 
-- 支持架构：`arm_64`（当前），`x86_64`（构建脚本已就绪，未实机验证）
-- 上游内核：`frp` v0.71.1（Apache-2.0），本项目**不修改 frp 源码**
-- 管理界面参考 OpenWrt `luci-app-frpc` 的字段组织：服务器 / 传输 / 隧道规则 / 状态
+## 为什么用它
 
-```
-浏览器 ──> QTS Apache (8080/443) ──ProxyPass──> 127.0.0.1:7911
-                                                    │
-                                            frpc-qnap-manager
-                                             ├─ 静态前端 + REST API
-                                             ├─ 会话认证 / CSRF
-                                             └─ 守护子进程
-                                                    │
-                                              frpc (127.0.0.1:7400)
-                                                    │
-                                               出站 → frps
-```
-
-对外只有 `NAS:8080/frpc-qnap/` 这一个入口，`netstat` 上不会出现新监听端口。
-
-## 它解决什么问题
-
-| 现有做法 | 问题 |
+| 常见做法 | 麻烦在哪 |
 |---|---|
-| Container Station 跑 frpc 镜像 | 吃内存、配置靠挂载文件、升级要重建容器 |
-| 民间 frpc QPKG（2019） | 图标打开的是 frpc 自带 AdminUI 的 7400 端口（独立页面 + 独立端口）、默认无认证、改配置会丢 token |
-| SSH 手写启动脚本 | 不自启、不守护、固件升级容易丢 |
+| Container Station 里跑 frpc 镜像 | 占内存，配置靠挂载文件，每次升级要重建容器 |
+| 老版第三方 frpc QPKG | 点图标跳的是 frpc 自带的 7400 管理页，独立端口 + 默认无认证，改配置还容易丢 Token |
+| 自己写 SSH 启动脚本 | 不自启、不守护，固件一升级就没了 |
 
-本项目的差异点：QTS 内嵌窗口、进程自动守护、配置热重载、Token 不回显、保留 QPKG 升级配置。
+frpc-qnap 把这三点都补上了：
 
-## 目录结构
+- **不出新端口**：界面走 QTS 自带的反向代理，对外只有 `NAS:8080/frpc-qnap/`
+- **自动守护**：frpc 崩了自动拉起（带退避，不会疯狂重启），NAS 重启后随系统起来
+- **改隧道不用重连**：增删改隧道是热重载，其他隧道不断线
+- **Token 不回显**：浏览器里看不到完整 Token，留空即表示「保持原值」
 
-```
-cmd/frpc-qnap-manager/     入口：flag 解析、信号处理、日志
-internal/config/           配置模型、校验、TOML 生成（唯一真相源 = manager.json）
-internal/supervisor/       frpc 子进程守护（退避重启）
-internal/frpc/             frpc 管理 API 客户端（/api/status、/api/reload）
-internal/server/           HTTP 服务、会话认证、REST API、QTS 前缀兼容
-internal/webui/assets/     前端（原生 ES 模块，无构建步骤）
-package/                   QPKG 打包源（qpkg.cfg、安装钩子、启停脚本、图标、默认配置）
-scripts/                   fetch-frp.sh / build-qpkg.sh / e2e.sh / make-icon.py
-                           preflight-qpkg.sh（打包源预检）/ wsl-setup.sh（WSL 一键装环境）
-docs/                      方案评估文档
-```
+## 功能
 
-## 本机开发
+- 四页界面：概览（连接状态与异常汇总）、隧道（增删改）、设置（服务器/传输/日志）、日志（实时看 frpc 输出）
+- 支持 `tcp` / `udp` / `http` / `https` / `stcp` / `xtcp` / `sudp` 七种类型的**服务端**配置
+- 保存前用 frpc 官方校验器验一遍，写错不会把正在跑的隧道弄挂
+- 中文界面，跟随 QTS 明暗主题
 
-需要 Go 1.22+。前端不需要 Node。
+## 系统要求
 
-```bash
-make build                 # 编译到 build/
-make run                   # 开发模式：前端读磁盘，数据目录 devdata/
-```
-
-`make run` 后打开 http://127.0.0.1:7911 ，初始口令在 `devdata/initial-password.txt`。
-
-本机没有 frpc 时，先放一个对应平台的二进制到 `devdata/frpc`（macOS 可直接用 frp 官方 `darwin_arm64` 包里的 `frpc`），否则只能看界面、不能真正建隧道。
-
-## 构建 ARM64 安装包
-
-```bash
-make arm64        # 交叉编译 manager + 下载并校验 frpc（linux/arm64）
-make qpkg         # 需要 Linux + QDK，产出 dist/frpc-qnap_*.qpkg
-```
-
-`make qpkg` 只能在 Linux 上跑（QNAP QDK 只提供 Linux x86_64 版）。WSL 里最短路径：
-
-```bash
-make setup        # 装依赖（rsync/file/make）+ Go(>=1.22) + QDK 2.5.3，重复执行也安全
-make arm64        # 交叉编译 manager + 下载 frpc（linux/arm64）
-make check        # 可选：只做打包源预检，不调 qbuild
-make qpkg         # 预检 + qbuild → dist/frpc-qnap_*.qpkg
-```
-
-不想用脚本时，等价于：
-
-```bash
-sudo apt install -y rsync curl file make
-sudo apt-get update            # 装 QDK 前必须，否则依赖会 404
-wget https://github.com/qnap-dev/QDK/releases/download/v2.5.3/qdk_2.5.3_amd64.deb
-sudo apt install ./qdk_2.5.3_amd64.deb
-make qpkg
-```
-
-> 依赖 `rsync` 是硬要求：qbuild 用它组装数据包，Ubuntu 最小安装不预装。
-> 仓库建议放在 WSL 家目录（`~/frpc-qnap`）而不是 `/mnt/c`，9p 文件系统会显著拖慢编译与打包；
-> 从 `/mnt/c` 复制进去的文件权限一律是 777，`make qpkg` 会在打包前统一归一化。
-
-已验证的产物（Ubuntu 24.04 + Go 1.27.3 + QDK 2.5.3）：
-
-| 项 | 值 |
+| 项 | 要求 |
 |---|---|
-| 文件 | `dist/frpc-qnap_1.0.1_arm_64.qpkg` |
-| 大小 | 8 705 176 字节 |
-| md5 | `f91945c48a12fbc77f845fdb209b9637` |
+| 支持架构 | **64 位 ARM**（QNAP 记作 `arm_64`，如 TS-428 这类 Cortex-A53 机型） |
+| 不支持 | 32 位 ARM（`arm-x19` / `arm-x31` / `arm-x41`）；`x86_64` 已能构建，但未实机验证 |
+| 系统版本 | QTS 4.4.0 及以上 |
+| 服务端 | 需要自备 frps（本应用只做客户端） |
 
-包内结构：`frpc`、`frpc-qnap-manager`、`frpc-qnap.sh`、`config/manager.json`、`config/state.json`、`.qpkg_icon.gif`
-（前端已内嵌进 manager，包里不再有 `web/` 副本）。
+## 安装
 
-## 在 NAS 上安装
+### 第 1 步：允许安装未签名应用
 
-1. 打开 App Center → 右上角设置 → 勾选 **「允许安装与执行不具数字签名的应用程序」**
-   （QTS 5.0.1 起该开关默认关闭；自签名无法通过 QNAP 信任链，个人开发者绕不过去）
-2. App Center → 右上角 `+` → **手动安装** → 选择 `dist/frpc-qnap_x.y.z_arm_64.qpkg`
-3. 装好后主菜单里出现 **frpc**，点开就是管理窗口
+App Center → 右上角齿轮 **设置** → **常规** → 勾选 **「允许安装不具备有效数字签名的应用程序」** → 应用。
 
-首次登录：
+> 这一步不能跳过。个人开发者无法通过 QNAP 的签名信任链，未开此开关时 App Center 只会回一句「无法安装程序包」。
+
+### 第 2 步：手动安装
+
+App Center → 右上角 `+` → **手动安装** → 选 `frpc-qnap_x.y.z_arm_64.qpkg` → 下一步。
+
+### 第 3 步：取初始登录口令
 
 ```bash
 cat /share/CACHEDEV1_DATA/.qpkg/frpc-qnap/initial-password.txt
 ```
 
-（ZFS 卷机型路径为 `/share/ZFS1_DATA/.qpkg/frpc-qnap/`）
+（ZFS 卷机型把 `CACHEDEV1_DATA` 换成 `ZFS1_DATA`；也可以用 File Station 直接浏览到该目录打开文件。）
 
-进去先填服务器地址、端口、Token，保存后 frpc 自动启动。
+### 第 4 步：打开并配置
 
-如果手动安装只弹一句「无法安装程序包」、没有其他提示、日志里也找不到东西，
-按 [`docs/troubleshooting-install.md`](docs/troubleshooting-install.md) 的阶梯走一遍
-（最常见原因是第 1 步那个签名开关没勾；文档里还有用于区分「前置拒绝」与「安装期失败」的判据）。
+QTS 主菜单点 **frpc**，在弹出窗口里输入口令登录。然后到「设置」页填 frps 的地址、端口、Token，保存后 frpc 自动启动。
 
-## 配置是怎么生效的
+接着到「隧道」页加规则，例如把 NAS 的 5000 端口映射到 frps 的某个远程端口。
 
-`manager.json` 是唯一真相源，`frpc.toml` 每次保存时重新生成（旧文件备份为 `.bak`）。
+## 界面说明
 
-| 改动内容 | 生效方式 |
+| 页面 | 用途 |
 |---|---|
-| 隧道增删改 | `GET /api/reload` 热重载，其他隧道不中断 |
-| 服务器地址 / 端口 / Token / 协议 / TLS / 日志 | 重启 frpc 进程（frp 的公共段不支持热重载） |
+| **概览** | 连接状态、隧道总数/运行中/异常数，异常项会标红并给出 frpc 的原始错误 |
+| **隧道** | 新增/编辑/删除穿透规则；选 HTTP/HTTPS 类型时自动隐藏端口、改为填写域名相关字段 |
+| **设置** | 服务器地址与 Token、传输参数（协议、TLS、心跳）、日志级别 |
+| **日志** | 直接读 frpc 的运行日志，排查连不上、端口被占这类问题最有用 |
 
-保存前会调用 `frpc verify -c` 做一次权威校验，配置写错不会把正在跑的隧道弄挂。
+## 改动什么时候生效
 
-## 安全设计
+| 你改了什么 | 会发生什么 |
+|---|---|
+| 隧道（增/删/改） | **热重载**，其他隧道不中断 |
+| 服务器地址 / 端口 / Token / 协议 / TLS / 日志级别 | frpc 进程**重启**（frp 的公共配置不支持热重载），期间隧道会短暂断开 |
 
-- manager 只绑 `127.0.0.1`，frpc 管理接口也只绑 `127.0.0.1` 且带随机 Basic Auth
-- 口令用 PBKDF2-HMAC-SHA256（12 万轮）加盐存储，会话 12 小时过期，重启即失效
-- 登录失败 5 次锁定 5 分钟
-- 写操作要求 `X-Requested-With: frpc-qnap`，配合 SameSite Cookie 防 CSRF
-- Token / secretKey / HTTP 口令不回显给浏览器，留空表示"保持不变"
-- 响应头带 `X-Frame-Options: SAMEORIGIN`，只允许 QTS 桌面同源嵌窗
+保存前会先做一次配置校验，校验不通过不会覆盖当前正在运行的配置。
 
-## 待实机验证（第一优先级）
+## 安全性
 
-以下几点只能在你那台 ARM NAS 上确认，属于方案里标注的 Phase 0：
+- 管理界面只监听本机回环地址，外部访问必须经由 QTS 的登录态
+- 管理口令加盐哈希存储，登录状态 12 小时过期，NAS 重启即失效
+- 连续 5 次口令错误锁定 5 分钟
+- 写操作有跨站请求伪造防护；只允许 QTS 桌面同源嵌窗
+- Token / 密钥类字段不回显给浏览器
 
-1. **QTS 代理是否剥离 `/frpc-qnap` 前缀** —— 后端已做两种兼容（`stripPrefix`），但要看实测
-2. QTS 生成的 Apache 规则落在哪里：`grep -rn "frpc-qnap" /etc/config/apache/`
-3. 重启 Qthttpd / 重启 NAS 后代理是否自愈
-4. `QPKG_DESKTOP_APP=1` 的窗口在 QTS 桌面里是否正常（有无 CSP 拦截）
-5. 未签名包的安装流程与提示文案
-6. 7400 / 7911 端口被占用时的表现（frpc 管理端口会自动顺延；manager 监听端口目前固定）
+## 常见问题
+
+**装的时候只提示「无法安装程序包」，没有别的信息？**
+按 [安装失败排查](docs/troubleshooting-install.md) 走一遍，九成是第 1 步的签名开关没开。文档里还给了区分「前置拒绝」和「安装期失败」的判据。
+
+**忘了登录口令？**
+当前版本还没有在界面里改口令的功能，只能重置：在 App Center 里停掉 frpc，SSH 登录 NAS，
+
+```bash
+mv /share/CACHEDEV1_DATA/.qpkg/frpc-qnap/config/state.json{,.bak}
+```
+
+再启动应用——会重新生成口令并写回 `initial-password.txt`。改名而不是删除，是为了出问题时能换回来。
+
+**改了服务器设置，隧道会断吗？**
+会，几秒钟。只有隧道相关的改动才是无缝热重载。
+
+**某项隧道显示异常怎么办？**
+「概览」和「隧道」页会显示 frpc 返回的原始状态。`start error` 通常是远程端口被占用，或 frps 没配置对应的 vhost 域名。
+
+**它会不会占用新端口？**
+不会。`netstat` 上只会看到两个回环地址上的监听：管理界面 7911，frpc 自身管理口 7400 段（被占用时自动顺延）。
+
+**需要我在路由器上做端口映射吗？**
+不需要。frpc 是主动出站连接 frps，NAS 侧不用开放任何入站端口。
 
 ## 已知限制
 
-- 只支持 frpc 的 `tcp/udp/http/https/stcp/xtcp/sudp` **服务端**配置，暂不支持 `[[visitors]]`（访问端）
-- 管理员口令修改入口尚未做到 UI 里（接口已支持 PBKDF2 存储，缺改密页面）
-- 不做 frps，服务端请部署在 VPS 上
-- 不支持 32 位 ARM（`arm-x19` / `arm-x31` / `arm-x41`）机型
-- QPKG 未做 GPG 签名（即使签了也过不了 QNAP 信任链）
-
-## 回归测试
-
-```bash
-# 用本机 frp 二进制跑一遍全链路（起 frps + manager，断言 23 项）
-FRP_DIR=/path/to/frp_0.71.1_darwin_arm64 make build && \
-FRP_DIR=/path/to/frp_0.71.1_darwin_arm64 bash scripts/e2e.sh
-```
-
-覆盖：健康检查、登录、401/CSRF、配置落盘、TOML 生成、隧道 running、热重载、重启、非法配置拒绝、日志、QTS 前缀兼容、启停。
+- 暂不支持**访问端**配置（frp 里的 `visitors`，用于 stcp/xtcp/sudp 的连接方），只支持服务端
+- 还没有界面化的口令修改入口（重置方式见上面的常见问题）
+- 只做客户端，不含 frps
+- 不支持 32 位 ARM 机型
+- 安装包未做数字签名，安装时需开启对应开关
 
 ## 许可
 
-本项目代码：Apache-2.0。
-分发的 `frpc` 二进制来自 [fatedier/frp](https://github.com/fatedier/frp)，同为 Apache-2.0，打包时保留其 LICENSE 与版权声明。
+本项目代码：[Apache-2.0](LICENSE)。
+
+分发的 `frpc` 二进制来自 [fatedier/frp](https://github.com/fatedier/frp)，同为 Apache-2.0，打包时保留了上游的 LICENSE 与版权声明。
+
+---
+
+## 开发
+
+构建、打包、回归测试、代码结构都在 [`docs/DEVELOPMENT.md`](docs/DEVELOPMENT.md)；接手维护先读 [`docs/HANDOFF.md`](docs/HANDOFF.md)。

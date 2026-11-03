@@ -205,27 +205,20 @@ make qpkg       # 预检 + qbuild
 
 ## 8. 常用命令
 
+完整的构建、打包、发版流程见 [`DEVELOPMENT.md`](DEVELOPMENT.md)，这里只留交接时最常用的几条：
+
 ```bash
 # 本机开发（需自己放一个 frpc 到 devdata/frpc）
 make build
 make run                      # http://127.0.0.1:7911，口令见 devdata/initial-password.txt
 
-# 回归
+# 回归（FRP_DIR 必须同时含 frpc 与 frps）
 FRP_DIR=/path/to/frp_x.y.z_<os>_<arch> make build && \
 FRP_DIR=/path/to/frp_x.y.z_<os>_<arch> bash scripts/e2e.sh
 
-# 交叉编译（已存在 frpc 时跳过下载）
-make arm64
-make x86_64
-
-# 打包（仅 Linux + QDK；WSL 里跑）
-make setup                    # 装依赖 + Go(>=1.22) + QDK 2.5.3，幂等
-make check                    # 只做打包源预检，不调 qbuild
-make arm64
-make qpkg                     # 预检 + qbuild → dist/frpc-qnap_1.0.1_arm_64.qpkg
+# 出包（仅 Linux + QDK；WSL 里跑）
+make setup && make arm64 && make qpkg
 ```
-
-`FRP_DIR` 必须同时含 `frpc` 和 `frps`（e2e 要起服务端）。
 
 ---
 
@@ -275,6 +268,7 @@ make qpkg                     # 预检 + qbuild → dist/frpc-qnap_1.0.1_arm_64.
 ## 12. 相关文档
 
 - `docs/frpc-qnap-方案评估.md` —— 可行性论证、QTS 集成机制、风险清单、§12 实现状态
+- `docs/DEVELOPMENT.md` —— **构建/打包/回归/发版手册**（README 里删掉的开发内容都在这里）
 - `docs/troubleshooting-install.md` —— **装不上时先看这里**：无提示无日志的排查阶梯、安装轨迹判据、对照实验
 - `docs/records/2026-11-03-worklog.md` —— 第一轮的开发时间线、决策依据、验证数据
 - `docs/records/2026-11-03-wsl-env.md` —— 第二轮：打包链静态验证、`QPKG_CONFIG` 缺陷的证据与复现、WSL 环境坑
