@@ -33,6 +33,7 @@
 - 仓库放在 `/mnt/d/...` 时 WSL 的 IO 很慢，建议 clone 到 WSL 家目录（`~/frpc-qnap`）
 - Windows 的 `make` 可能是 Git Bash 的旧版本，**统一在 WSL 里执行 Makefile**
 - 打包出来的 `.qpkg` 在 WSL 的 `dist/` 下，用 Windows 资源管理器走 `\\wsl$\Ubuntu-24.04\home\...` 取
+- WSL2 里 `make run` 后，Windows 浏览器直接开 `http://localhost:7911` 即可（WSL2 会自动转发回环端口）；若不通，用 `hostname -I` 拿 WSL 的 IP 再访问
 
 ---
 
