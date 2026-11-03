@@ -1,5 +1,8 @@
 # frpc-qnap
 
+> **接手开发？先读 [`docs/HANDOFF.md`](docs/HANDOFF.md)** —— 环境要求、代码地图、当前进度、下一步任务都在那里。
+> 开发过程与决策依据见 [`docs/records/2026-11-03-worklog.md`](docs/records/2026-11-03-worklog.md)。
+
 QNAP 原生的 frpc 客户端：**管理界面直接嵌在 NAS 网页端里**，不额外开放端口。
 
 - 支持架构：`arm_64`（当前），`x86_64`（构建脚本已就绪，未实机验证）
