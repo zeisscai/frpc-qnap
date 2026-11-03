@@ -186,7 +186,7 @@ make qpkg                     # → dist/frpc-qnap_1.0.0_arm_64.qpkg
 
 ## 10. 禁忌
 
-- **不要 `rm -rf .workbuddy`**（项目记忆）
+- `.workbuddy/` 是本地助手记忆，**不入库**；仓库内的存档副本在 `docs/records/memory-2026-11-03.md`，别删
 - 不要把 `auth.token` / `secretKey` / `adminPassword` 写进日志或返回给前端（现有代码已做掩码，别破坏）
 - 不要把 `devdata/`、`build/`、`dist/`、`package/*/frpc*` 提交进仓库（`.gitignore` 已覆盖）
 - 不要改 `QPKG_NAME`
@@ -209,5 +209,6 @@ make qpkg                     # → dist/frpc-qnap_1.0.0_arm_64.qpkg
 
 - `docs/frpc-qnap-方案评估.md` —— 可行性论证、QTS 集成机制、风险清单、§12 实现状态
 - `docs/records/2026-11-03-worklog.md` —— 本次开发的时间线、决策依据、验证数据
+- `docs/records/memory-2026-11-03.md` —— 开发过程中的原始工作记忆（按阶段追加，未整理）
 - `README.md` —— 面向使用者的构建与安装说明
 - `handoff/` —— 源码快照压缩包（离线备份，非必需）
