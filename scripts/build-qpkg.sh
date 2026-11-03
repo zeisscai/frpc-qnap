@@ -31,10 +31,24 @@ if [ ! -f "${ROOT}/package/${ARCH}/frpc-qnap-manager" ] || [ ! -f "${ROOT}/packa
 	exit 1
 fi
 
-echo "==> 同步前端资源到 package/shared/web"
-rm -rf "${ROOT}/package/shared/web"
-mkdir -p "${ROOT}/package/shared/web"
-cp -R "${ROOT}/internal/webui/assets/." "${ROOT}/package/shared/web/"
+# 包内权限必须由构建决定，不能继承检出/复制时的权限。
+# 典型场景：仓库从 /mnt/c 拷进 WSL 时 drvfs 会把所有文件标成 777，
+# 于是 NAS 上出现 world-writable 的可执行文件与配置文件。
+echo "==> 归一化包内文件权限（644，可执行 755，目录 755）"
+find "${ROOT}/package/${ARCH}" -type d -exec chmod 755 {} +
+find "${ROOT}/package/${ARCH}" -type f -exec chmod 644 {} +
+chmod 755 "${ROOT}/package/${ARCH}/frpc-qnap-manager" "${ROOT}/package/${ARCH}/frpc"
+find "${ROOT}/package/shared" -type d -exec chmod 755 {} +
+find "${ROOT}/package/shared" -type f -exec chmod 644 {} +
+find "${ROOT}/package/shared" -type f -name '*.sh' -exec chmod 755 {} +
+chmod 644 "${ROOT}/package/qpkg.cfg" "${ROOT}/package/package_routines"
+if [ -d "${ROOT}/package/icons" ]; then
+	find "${ROOT}/package/icons" -type d -exec chmod 755 {} +
+	find "${ROOT}/package/icons" -type f -exec chmod 644 {} +
+fi
+
+# 注意：前端资源已用 //go:embed 编进 manager（internal/webui/assets），
+# 非 dev 模式不读磁盘上的 web/ 目录，所以不再往包里放一份副本。
 
 # qbuild 的报错信息很少（配置路径写错只说 "no such file"），先在前面把关。
 # 退出码 2 = 只有警告，可以继续。

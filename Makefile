@@ -5,7 +5,7 @@ ARCH ?= arm_64
 BIN := frpc-qnap-manager
 LDFLAGS := -s -w -X main.version=$(VERSION)
 
-.PHONY: help fmt vet build run arm64 x86_64 cross web qpkg check setup clean
+.PHONY: help fmt vet build run arm64 x86_64 cross qpkg check setup clean
 
 help:
 	@echo "make build        本机编译（macOS 开发用，产物在 build/）"
@@ -51,11 +51,6 @@ cross:
 	else \
 		sh scripts/fetch-frp.sh $(FRP_VERSION) $$ga package/$(ARCH); \
 	fi
-
-web:
-	rm -rf package/shared/web
-	mkdir -p package/shared/web
-	cp -R internal/webui/assets/. package/shared/web/
 
 qpkg:
 	@sh scripts/build-qpkg.sh $(ARCH)

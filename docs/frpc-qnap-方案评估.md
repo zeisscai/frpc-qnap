@@ -250,6 +250,7 @@ frpc-qnap/
 ```
 
 `QPKG_CONFIG` 里登记 `config/manager.json`（用户配置，升级要留）与 `config/frpc.toml`；`web/`、二进制每次覆盖。
+（实现修正：`frpc.toml` 是生成物不需要保留，只登记 `manager.json`/`state.json`；`web/` 最终没有进包——前端用 `//go:embed` 编进了 manager。）
 
 ### 5.3 端口规划
 
@@ -525,7 +526,7 @@ grep -rn "hello\|7911" /etc/config/apache/ | head
 | 构建脚本 | ✅ | `make arm64` 交叉编译 + `fetch-frp.sh` 校验 sha256 |
 | 回归测试 | ✅ | `scripts/e2e.sh`，拉起本地 frps 跑 23 项断言，连续两轮全绿 |
 | ARM64 产物 | ✅ | manager ≈6.5 MB + frpc ≈15 MB，均为静态链接 ELF |
-| 打包链 | ⚠️ | 参数与目录约定已逐条对照 QDK 2.5.3 源码确认，并修掉一处必定失败项；`qbuild` 实跑待 WSL（见 `records/2026-11-03-wsl-env.md`） |
+| 打包链 | ✅ | WSL（Ubuntu 24.04 + QDK 2.5.3）实跑 `make qpkg` 成功，产出 8.71 MB ARM64 包；包结构、权限、尾部元数据已解包核对（`records/2026-11-03-wsl-env.md` §6） |
 
 ### 12.2 与评估稿的偏差
 

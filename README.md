@@ -82,13 +82,26 @@ make qpkg         # 预检 + qbuild → dist/frpc-qnap_*.qpkg
 
 ```bash
 sudo apt install -y rsync curl file make
+sudo apt-get update            # 装 QDK 前必须，否则依赖会 404
 wget https://github.com/qnap-dev/QDK/releases/download/v2.5.3/qdk_2.5.3_amd64.deb
 sudo apt install ./qdk_2.5.3_amd64.deb
 make qpkg
 ```
 
 > 依赖 `rsync` 是硬要求：qbuild 用它组装数据包，Ubuntu 最小安装不预装。
-> 仓库建议放在 WSL 家目录（`~/frpc-qnap`）而不是 `/mnt/c`，9p 文件系统会显著拖慢编译与打包。
+> 仓库建议放在 WSL 家目录（`~/frpc-qnap`）而不是 `/mnt/c`，9p 文件系统会显著拖慢编译与打包；
+> 从 `/mnt/c` 复制进去的文件权限一律是 777，`make qpkg` 会在打包前统一归一化。
+
+已验证的产物（Ubuntu 24.04 + Go 1.27.3 + QDK 2.5.3）：
+
+| 项 | 值 |
+|---|---|
+| 文件 | `dist/frpc-qnap_1.0.0_arm_64.qpkg` |
+| 大小 | 8 705 163 字节 |
+| md5 | `4bb440639025731240fcfa42a6a72630` |
+
+包内结构：`frpc`、`frpc-qnap-manager`、`frpc-qnap.sh`、`config/manager.json`、`config/state.json`、`.qpkg_icon.gif`
+（前端已内嵌进 manager，包里不再有 `web/` 副本）。
 
 ## 在 NAS 上安装
 

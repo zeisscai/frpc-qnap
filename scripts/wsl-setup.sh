@@ -127,6 +127,10 @@ if [ "${WANT_QDK}" -eq 1 ]; then
 		URL="https://github.com/qnap-dev/QDK/releases/download/v${QDK_VERSION}/${deb}"
 		say "下载 ${URL}"
 		curl -fL --retry 3 --connect-timeout 15 -o "${tmp}/${deb}" "${URL}"
+		# QDK 依赖 gnupg2（24.04 里是过渡包）。索引过期时 apt 会去抓已下架的旧版本
+		# 并报 404，所以安装 deb 前必须刷新索引——即使上面「依赖齐全」已经跳过了 update。
+		say "刷新 apt 索引（QDK 有依赖需要解析）"
+		${SUDO} apt-get update -qq
 		${SUDO} env DEBIAN_FRONTEND=noninteractive apt-get install -y -qq "${tmp}/${deb}"
 		hash -r 2>/dev/null || true
 		command -v qbuild >/dev/null 2>&1 || die "QDK 装完了但找不到 qbuild，检查 /usr/bin/qbuild 是否是指向 /usr/share/QDK/bin/qbuild 的软链"

@@ -1,7 +1,7 @@
 # 交接说明（HANDOFF）
 
 > 给接手者的第一份文件。读完这页再动代码。
-> 最后更新：2026-11-03 · 最后提交：`4eeb700` · 已在 WSL 侧做了一轮静态验证（见 §2.1）
+> 最后更新：2026-11-03 · 最后提交：见 `git log -1` · 打包链已在 WSL 实跑通过（见 §4 与 `docs/records/2026-11-03-wsl-env.md`）
 
 ---
 
@@ -11,13 +11,12 @@
 
 - 上游内核：frp v0.71.1，**不修改源码**，直接用官方 release 二进制
 - 目标架构：`arm_64`（用户只有 ARM 机型）；`x86_64` 构建链已就绪但未实机验证
-- 当前状态：**原型可运行、已通过 23 项自动化回归，但还没在真 NAS 上装过**
+- 当前状态：**已产出可分发 QPKG（`dist/frpc-qnap_1.0.0_arm_64.qpkg`，8.71 MB），但还没在真 NAS 上装过**
 
-**还缺证据的两件事**（接手后优先消掉）：
+**只剩一件事没有任何证据：装到真 NAS 上的表现**（HANDOFF §5 Phase 0 六条），其中最关键的是
+**QTS 反向代理会不会剥离 `/frpc-qnap` 前缀**——后端两种都兼容，但没实测过。
+打包侧（`qbuild` 目录约定、包结构、权限、回归）这一轮已经全部拿到证据。
 
-1. `qbuild` 从未真正执行过。上一轮预计「目录约定可能报错」，这轮已确认**确实会报错并已修**
-   （`QPKG_CONFIG` 默认文件必须放 `package/shared/config/`，见 §7 第 9 条），但**实跑仍未做**
-2. QTS 反向代理的前缀行为没实测过（后端两种都兼容，但没验证过）
 
 
 ---
@@ -94,45 +93,54 @@ make qpkg        # 内部先跑 scripts/preflight-qpkg.sh，再调 qbuild，产�
 - [x] Go 管理器（配置/校验/TOML/守护/API/认证/CSRF）
 - [x] 前端四页（概览 / 隧道 / 设置 / 日志），字段对齐 luci-app-frpc
 - [x] QPKG 打包源（qpkg.cfg、钩子、启停脚本、图标、默认配置）
-- [x] 交叉编译 ARM64（manager ≈6.5 MB / Go 1.26 + frpc ≈15 MB，均为静态 ELF aarch64）
+- [x] 交叉编译 ARM64（manager 6.5 MB@Go1.26 / 7.0 MB@Go1.27 + frpc 15 MB，均为静态 ELF aarch64）
 - [x] e2e 回归脚本，连续两轮 23/23 通过
 - [x] UI 用无头 Chromium 实际登录验证，控制台零报错
 - [x] 打包链静态验证：qbuild 参数与目录约定逐条对照 QDK 2.5.3 源码确认，修掉一处会让首次打包必定失败的 `QPKG_CONFIG` 路径问题
-- [x] `make setup` / `make check`：WSL 环境一键装、打包源预检（见 `docs/records/2026-11-03-wsl-env.md`）
+- [x] **`make qpkg` 实跑成功**：WSL Ubuntu 24.04 + QDK 2.5.3 产出 `dist/frpc-qnap_1.0.0_arm_64.qpkg`（8 705 163 B，md5 `4bb440639025731240fcfa42a6a72630`），包结构/权限/尾部元数据均已解包核对
+- [x] e2e 回归在 WSL 里复跑：**23/23 通过**
+- [x] `make setup` / `make check`：WSL 环境一键装、打包源预检
 
 ### 未完成（按优先级）
 
-1. **`make qpkg` 实跑**（本轮环境无法执行 WSL）—— 出包前的一切静态检查都已通过
-2. **真机 Phase 0**（见第 5 节）—— 阻塞一切发布
-3. 管理员改密页面（后端 PBKDF2 已就绪，缺 UI；口令只能靠 `initial-password.txt`）
-4. `[[visitors]]` 支持（stcp/xtcp/sudp 的**访问端**，目前只支持服务端）
-5. manager 监听端口（7911）冲突时自动顺延（现在只有 frpc 管理端口会顺延）
+1. **真机 Phase 0**（见第 5 节）—— 阻塞一切发布
+2. 管理员改密页面（后端 PBKDF2 已就绪，缺 UI；口令只能靠 `initial-password.txt`）
+3. `[[visitors]]` 支持（stcp/xtcp/sudp 的**访问端**，目前只支持服务端）
+4. manager 监听端口（7911）冲突时自动顺延（现在只有 frpc 管理端口会顺延）
 
 ---
 
 ## 5. 下一步任务（含验收标准）
 
-### 任务 0：首次真正出包（先做，10 分钟内）
+### 任务 0：出包 —— ✅ 已完成（2026-11-03）
+
+已完成，命令与结果留档，换机器/换版本时按同样步骤复现：
 
 ```bash
 cp -a /mnt/c/Users/chn/Desktop/workbuddy/frpc-qnap ~/frpc-qnap && cd ~/frpc-qnap
-make setup      # 装 rsync/curl/file/make + Go(>=1.22) + QDK 2.5.3
-make arm64
-make qpkg
+make setup      # 装 rsync/curl/file/make + Go(>=1.22) + QDK 2.5.3（幂等）
+make arm64      # 已有 package/arm_64/frpc 时跳过下载
+make qpkg       # 预检 + qbuild
 ```
 
-| 验收项 | 通过标准 |
-|---|---|
-| `qbuild` 不再报 `no such file; check your QPKG_CONFIG settings` | 上一轮的阻断点已修，应不再出现 |
-| 产物存在 | `ls dist/` 有 `frpc-qnap_1.0.0_arm_64.qpkg` |
-| 包内结构正确 | `qbuild --extract dist/*.qpkg /tmp/x` 后 `/tmp/x` 下有 `frpc`、`frpc-qnap-manager`、`frpc-qnap.sh`、`config/manager.json` |
-| 可安装性 | 解出的 `package_routines`、`frpc-qnap.sh` 用 `cat -A` 看无 `^M`（CRLF） |
+实测结果（Ubuntu 24.04.4 / Go 1.27.3 / QDK 2.5.3）：
 
-若 `qbuild` 报其他错，把完整输出贴回 `docs/records/2026-11-03-wsl-env.md` §6，并把结论补进第 7 节。
+| 验收项 | 结果 |
+|---|---|
+| `qbuild` 通过 | ✅ 不再出现 `no such file; check your QPKG_CONFIG settings`（该阻断点已在上一轮修掉） |
+| 产物 | ✅ `dist/frpc-qnap_1.0.0_arm_64.qpkg`，8 705 163 B，md5 `4bb4406390…2630` |
+| 包内结构 | ✅ `frpc` / `frpc-qnap-manager` / `frpc-qnap.sh` / `config/manager.json` / `config/state.json` / `.qpkg_icon.gif` |
+| 权限 | ✅ 二进制与 `frpc-qnap.sh` 755，配置与许可 644，目录 755（打包时归一化，不继承检出权限） |
+| 编码 | ✅ `package_routines`、`frpc-qnap.sh` 均为 LF |
+| 尾部元数据 | ✅ `frpc-qnap / 1.0.0 / QNAPQPKG` |
+| 回归 | ✅ `FRP_DIR=… bash scripts/e2e.sh` → 23/23 |
+
+详细证据见 `docs/records/2026-11-03-wsl-env.md` §6。若换环境后 `qbuild` 报新错，
+把完整输出补进该文档 §6，并同步第 7 节。
 
 ### 任务 1：真机 Phase 0（最高优先级）
 
-先 `make qpkg` 出包，装到 NAS，然后逐条验证：
+包已经有了，装到 NAS，然后逐条验证：
 
 | # | 验证项 | 命令 / 动作 | 通过标准 |
 |---|---|---|---|
@@ -189,6 +197,9 @@ make qpkg
 11. **CRLF 会让 QTS 装不上包**：`package_routines` 与 `shared/*.sh` 由 NAS 上的 busybox sh 执行，带 `\r` 会报 `not found` / 语法错。仓库已加 `.gitattributes`（`text=auto eol=lf`），别删；在 Windows 上手工改过脚本后可用 `git check-attr -a <file>` 确认。
 12. **WSL 最小安装不自带 `rsync`**，而 qbuild 用 rsync 组装数据包，缺了会在打包中途挂。`make setup` 会装。
 13. **`build-qpkg.sh` 旧版提示「请先运行 make arm」是个错误目标名**（`${ARCH%%_*}` 把 `arm_64` 截成 `arm`）。已改成显式映射。
+14. **装 QDK 前必须 `apt-get update`**：deb 依赖 `gnupg2`，索引过期时 apt 会去抓已下架的旧版本报 `404 Not Found`，安装中断。`wsl-setup.sh` 已改成无条件先 update。
+15. **从 `/mnt/c` 拷进 WSL 的文件一律是 777**（drvfs 不保留 POSIX 权限）。不处理就会把 world-writable 的二进制和配置文件打进包。`build-qpkg.sh` 打包前统一归一化权限。
+16. **`package/shared/web/` 是死重量**：前端已 `//go:embed` 进 manager，非 `-dev` 模式从不读磁盘上的 `web/`（`server.go` 的 `staticHandler` 只在 Dev 分支用 `AssetsDir`）。打包流程已不再同步该目录。
 
 ---
 
