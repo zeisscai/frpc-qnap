@@ -1,0 +1,67 @@
+######################################################################
+# frpc-qnap 安装钩子
+######################################################################
+
+pkg_init() {
+	:
+}
+
+# 安装前检查：架构必须匹配，避免用户装错包。
+pkg_check_requirement() {
+	ARCH="$(uname -m)"
+	case "${ARCH}" in
+		aarch64)
+			;;
+		*)
+			err_log "frpc-qnap: 此安装包仅支持 ARM64 (aarch64) 机型，当前架构为 ${ARCH}。"
+			return 1
+			;;
+	esac
+	return 0
+}
+
+pkg_pre_install() {
+	# 升级时先停掉正在运行的实例，避免文件被占用。
+	if [ -x "${SYS_QPKG_DIR}/frpc-qnap.sh" ]; then
+		"${SYS_QPKG_DIR}/frpc-qnap.sh" stop >/dev/null 2>&1
+	fi
+	return 0
+}
+
+pkg_install() {
+	:
+}
+
+pkg_post_install() {
+	QPKG_DIR="${SYS_QPKG_DIR}"
+
+	/bin/mkdir -p "${QPKG_DIR}/config" "${QPKG_DIR}/logs" 2>/dev/null
+	/bin/chmod 700 "${QPKG_DIR}/config" "${QPKG_DIR}/logs" 2>/dev/null
+
+	for f in frpc frpc-qnap-manager frpc-qnap.sh; do
+		[ -f "${QPKG_DIR}/${f}" ] && /bin/chmod 755 "${QPKG_DIR}/${f}"
+	done
+
+	# 首次安装时给一份可读的说明，方便找回初始口令。
+	if [ ! -f "${QPKG_DIR}/initial-password.txt" ]; then
+		/bin/echo "frpc-qnap 首次启动后会在本目录生成 initial-password.txt（初始登录口令）。" \
+			> "${QPKG_DIR}/initial-password.txt"
+		/bin/chmod 600 "${QPKG_DIR}/initial-password.txt"
+	fi
+
+	return 0
+}
+
+PKG_PRE_REMOVE="{
+	if [ -x \"${SYS_QPKG_DIR}/frpc-qnap.sh\" ]; then
+		\"${SYS_QPKG_DIR}/frpc-qnap.sh\" stop >/dev/null 2>&1
+	fi
+}"
+
+PKG_MAIN_REMOVE="{
+	:
+}"
+
+PKG_POST_REMOVE="{
+	:
+}"

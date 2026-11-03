@@ -1,0 +1,338 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<meta name="color-scheme" content="light dark">
+<title>frpc · QNAP</title>
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 64 64'%3E%3Crect width='64' height='64' rx='13' fill='%230f6fc5'/%3E%3Ctext x='32' y='45' font-size='38' font-family='sans-serif' fill='%23fff' text-anchor='middle'%3EF%3C/text%3E%3C/svg%3E">
+<link rel="stylesheet" href="./app.css">
+</head>
+<body>
+
+<!-- 登录 -->
+<div id="login" class="login hidden">
+  <form class="login-card" id="login-form" autocomplete="off">
+    <div class="login-logo">
+      <span class="dot"></span> frpc
+    </div>
+    <p class="login-sub">QNAP 客户端管理</p>
+    <label class="field">
+      <span>登录口令</span>
+      <input type="password" id="login-password" placeholder="初始口令见安装目录 initial-password.txt" required>
+    </label>
+    <button class="btn primary block" type="submit">登录</button>
+    <p class="hint" id="login-hint"></p>
+  </form>
+</div>
+
+<!-- 主体 -->
+<div id="app" class="app hidden">
+  <header class="topbar">
+    <div class="brand">
+      <span class="dot" id="brand-dot"></span>
+      <span class="brand-name">frpc</span>
+      <span class="badge" id="conn-badge">未连接</span>
+    </div>
+    <div class="topbar-right">
+      <span class="muted" id="version-label"></span>
+      <button class="btn ghost sm" id="btn-logout">退出</button>
+    </div>
+  </header>
+
+  <nav class="tabs">
+    <a href="#/overview" class="tab" data-tab="overview">概览</a>
+    <a href="#/proxies" class="tab" data-tab="proxies">隧道</a>
+    <a href="#/settings" class="tab" data-tab="settings">设置</a>
+    <a href="#/logs" class="tab" data-tab="logs">日志</a>
+  </nav>
+
+  <main class="content">
+
+    <!-- 概览 -->
+    <section class="page" id="page-overview">
+      <div class="stats">
+        <div class="stat">
+          <div class="stat-label">进程</div>
+          <div class="stat-value" id="stat-process">—</div>
+          <div class="stat-sub" id="stat-process-sub"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">隧道</div>
+          <div class="stat-value" id="stat-proxies">—</div>
+          <div class="stat-sub" id="stat-proxies-sub"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">frps</div>
+          <div class="stat-value" id="stat-server">—</div>
+          <div class="stat-sub" id="stat-server-sub"></div>
+        </div>
+        <div class="stat">
+          <div class="stat-label">版本</div>
+          <div class="stat-value small" id="stat-version">—</div>
+          <div class="stat-sub" id="stat-version-sub"></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-head">
+          <h2>隧道状态</h2>
+          <div class="actions">
+            <button class="btn sm" data-svc="start">启动</button>
+            <button class="btn sm" data-svc="stop">停止</button>
+            <button class="btn sm" data-svc="restart">重启</button>
+            <button class="btn sm" id="btn-reload">热重载</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="overview-table">
+            <thead>
+              <tr><th>名称</th><th>类型</th><th>本地</th><th>远程</th><th>状态</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 隧道 -->
+    <section class="page" id="page-proxies">
+      <div class="card">
+        <div class="card-head">
+          <h2>隧道列表</h2>
+          <div class="actions">
+            <button class="btn sm" id="btn-refresh-proxies">刷新</button>
+            <button class="btn sm primary" id="btn-add-proxy">新增隧道</button>
+          </div>
+        </div>
+        <div class="table-wrap">
+          <table class="table" id="proxies-table">
+            <thead>
+              <tr><th>名称</th><th>类型</th><th>本地地址</th><th>远程</th><th>状态</th><th class="col-ops">操作</th></tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
+      </div>
+    </section>
+
+    <!-- 设置 -->
+    <section class="page" id="page-settings">
+      <form id="settings-form" autocomplete="off">
+        <div class="card">
+          <div class="card-head"><h2>服务器</h2></div>
+          <div class="grid">
+            <label class="field">
+              <span>服务器地址 <em>frps 的 IP 或域名</em></span>
+              <input type="text" name="serverAddr" placeholder="frps.example.com" required>
+            </label>
+            <label class="field">
+              <span>服务器端口</span>
+              <input type="number" name="serverPort" min="1" max="65535" placeholder="7000" required>
+            </label>
+            <label class="field">
+              <span>Token <em id="token-hint"></em></span>
+              <input type="password" name="authToken" placeholder="留空表示不修改">
+            </label>
+            <label class="field">
+              <span>用户名 <em>可选，多用户场景</em></span>
+              <input type="text" name="authUser" placeholder="留空即可">
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>传输</h2></div>
+          <div class="grid">
+            <label class="field">
+              <span>协议</span>
+              <select name="protocol"></select>
+            </label>
+            <label class="field">
+              <span>连接池大小 <em>0 表示不启用</em></span>
+              <input type="number" name="poolCount" min="0" max="100" placeholder="0">
+            </label>
+            <label class="field">
+              <span>代理服务器 <em>HTTP/SOCKS5，可选</em></span>
+              <input type="text" name="proxyURL" placeholder="http://127.0.0.1:8080">
+            </label>
+          </div>
+          <div class="switches">
+            <label class="switch-row">
+              <input type="checkbox" name="tlsEnable">
+              <span>启用 TLS 加密</span>
+            </label>
+            <label class="switch-row">
+              <input type="checkbox" name="tcpMux">
+              <span>TCP 多路复用</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="card">
+          <div class="card-head"><h2>日志</h2></div>
+          <div class="grid">
+            <label class="field">
+              <span>日志级别</span>
+              <select name="logLevel"></select>
+            </label>
+            <label class="field">
+              <span>保留天数</span>
+              <input type="number" name="logMaxDays" min="1" max="30" placeholder="3">
+            </label>
+            <label class="switch-row wide">
+              <input type="checkbox" name="loginFailExit">
+              <span>登录失败时退出（由 QTS 侧的守护进程自动重试）</span>
+            </label>
+          </div>
+        </div>
+
+        <div class="savebar">
+          <button type="submit" class="btn primary">保存并应用</button>
+          <span class="muted" id="save-hint"></span>
+        </div>
+      </form>
+    </section>
+
+    <!-- 日志 -->
+    <section class="page" id="page-logs">
+      <div class="card">
+        <div class="card-head">
+          <h2>运行日志</h2>
+          <div class="actions">
+            <select id="log-file" class="inline-select">
+              <option value="frpc">frpc</option>
+              <option value="manager">manager</option>
+            </select>
+            <select id="log-lines" class="inline-select">
+              <option value="100">100 行</option>
+              <option value="200" selected>200 行</option>
+              <option value="500">500 行</option>
+              <option value="1000">1000 行</option>
+            </select>
+            <label class="switch-row compact">
+              <input type="checkbox" id="log-auto" checked>
+              <span>自动刷新</span>
+            </label>
+            <button class="btn sm" id="btn-refresh-logs">刷新</button>
+          </div>
+        </div>
+        <pre class="log" id="log-content">加载中…</pre>
+      </div>
+    </section>
+
+  </main>
+</div>
+
+<!-- 隧道编辑弹窗 -->
+<div id="modal" class="modal hidden">
+  <div class="modal-card">
+    <div class="modal-head">
+      <h2 id="modal-title">新增隧道</h2>
+      <button class="btn ghost sm" id="modal-close">关闭</button>
+    </div>
+    <form id="proxy-form" autocomplete="off">
+      <div class="modal-body">
+        <div class="grid">
+          <label class="field">
+            <span>名称 <em>唯一，字母数字与 _ . -</em></span>
+            <input type="text" name="name" placeholder="nas-web" required pattern="[A-Za-z0-9][A-Za-z0-9_.\-]{0,63}">
+          </label>
+          <label class="field">
+            <span>类型</span>
+            <select name="type" id="proxy-type"></select>
+          </label>
+          <label class="field">
+            <span>本地地址</span>
+            <input type="text" name="localIP" placeholder="127.0.0.1">
+          </label>
+          <label class="field">
+            <span>本地端口</span>
+            <input type="number" name="localPort" min="1" max="65535" placeholder="8080">
+          </label>
+          <label class="field" data-when="tcpudp">
+            <span>远程端口 <em>需在 frps 侧放行</em></span>
+            <input type="number" name="remotePort" min="1" max="65535" placeholder="18080">
+          </label>
+          <label class="field" data-when="domain">
+            <span>自定义域名 <em>逗号分隔</em></span>
+            <input type="text" name="customDomains" placeholder="nas.example.com">
+          </label>
+          <label class="field" data-when="domain">
+            <span>子域名 <em>需 frps 配置 subDomainHost</em></span>
+            <input type="text" name="subdomain" placeholder="nas">
+          </label>
+          <label class="field" data-when="domain">
+            <span>URL 路由前缀 <em>逗号分隔</em></span>
+            <input type="text" name="locations" placeholder="/api,/static">
+          </label>
+          <label class="field" data-when="domain">
+            <span>Host 头重写</span>
+            <input type="text" name="hostHeaderRewrite" placeholder="local.example.com">
+          </label>
+          <label class="field" data-when="domain">
+            <span>HTTP Basic 用户</span>
+            <input type="text" name="httpUser" placeholder="可选">
+          </label>
+          <label class="field" data-when="domain">
+            <span>HTTP Basic 口令</span>
+            <input type="password" name="httpPassword" placeholder="留空表示不修改">
+          </label>
+          <label class="field" data-when="p2p">
+            <span>密钥 secretKey <em>访问端需一致</em></span>
+            <input type="password" name="secretKey" placeholder="留空表示不修改">
+          </label>
+          <label class="field wide">
+            <span>备注</span>
+            <input type="text" name="remark" placeholder="这条隧道是做什么的">
+          </label>
+        </div>
+
+        <div class="switches">
+          <label class="switch-row"><input type="checkbox" name="useEncryption"><span>加密传输</span></label>
+          <label class="switch-row"><input type="checkbox" name="useCompression"><span>压缩传输</span></label>
+        </div>
+
+        <details class="advanced">
+          <summary>健康检查</summary>
+          <div class="grid">
+            <label class="field">
+              <span>检查类型</span>
+              <select name="healthCheckType">
+                <option value="">不启用</option>
+                <option value="tcp">TCP</option>
+                <option value="http">HTTP</option>
+              </select>
+            </label>
+            <label class="field" data-when="hc-http">
+              <span>HTTP 检查路径</span>
+              <input type="text" name="healthCheckURL" placeholder="/healthz">
+            </label>
+            <label class="field">
+              <span>超时（秒）</span>
+              <input type="number" name="healthCheckTimeoutS" min="1" max="60" placeholder="3">
+            </label>
+            <label class="field">
+              <span>最大失败次数</span>
+              <input type="number" name="healthCheckMaxFailed" min="1" max="10" placeholder="3">
+            </label>
+            <label class="field">
+              <span>检查间隔（秒）</span>
+              <input type="number" name="healthCheckIntervalS" min="1" max="60" placeholder="10">
+            </label>
+          </div>
+        </details>
+      </div>
+      <div class="modal-foot">
+        <button type="button" class="btn" id="modal-cancel">取消</button>
+        <button type="submit" class="btn primary">保存</button>
+      </div>
+    </form>
+  </div>
+</div>
+
+<div id="toast" class="toast"></div>
+
+<script type="module" src="./app.js"></script>
+</body>
+</html>

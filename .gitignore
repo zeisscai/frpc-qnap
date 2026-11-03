@@ -1,0 +1,21 @@
+# 构建产物
+/build/
+/dist/
+*.qpkg
+*.tar.gz
+
+# 本地开发数据（manager 在非 QNAP 环境下使用）
+/devdata/
+
+# macOS
+.DS_Store
+
+# 二进制产物（由 make 生成）
+package/arm_64/frpc
+package/x86_64/frpc
+package/arm_64/frpc-qnap-manager
+package/x86_64/frpc-qnap-manager
+package/shared/web/
+
+# 本地助手数据
+.workbuddy/
