@@ -70,6 +70,12 @@ EOF
 "$TMP/frps" -c "$TMP/frps.toml" >"$TMP/frps.log" 2>&1 &
 FRPS_PID=$!
 
+# 等 frps 真正监听，否则 frpc 首连会失败（loginFailExit=false 时也会拖慢用例）
+for _ in $(seq 1 50); do
+	nc -z 127.0.0.1 "$FRPS_PORT" 2>/dev/null && break
+	sleep 0.1
+done
+
 "$ROOT/build/frpc-qnap-manager" \
 	-data "$TMP/data" -frpc "$TMP/frpc" \
 	-listen "127.0.0.1:${MGR_PORT}" -admin-port "${ADMIN_PORT}" \
@@ -116,8 +122,8 @@ cat >"$TMP/cfg.json" <<EOF
   "logMaxDays": 3,
   "loginFailExit": false,
   "proxies": [
-    {"name":"qts-web","type":"tcp","localIP":"127.0.0.1","localPort":8080,"remotePort":18080,"remark":"NAS 管理界面"},
-    {"name":"nas-ssh","type":"tcp","localIP":"127.0.0.1","localPort":22,"remotePort":18022}
+    {"name":"qts-web","type":"tcp","localIP":"127.0.0.1","localPort":8080,"remotePort":28080,"remark":"NAS 管理界面"},
+    {"name":"nas-ssh","type":"tcp","localIP":"127.0.0.1","localPort":22,"remotePort":28022}
   ]
 }
 EOF
@@ -127,7 +133,7 @@ RESP=$(curl -s -b "$CJ" -X PUT -H 'Content-Type: application/json' -H 'X-Request
 assert_eq "$(echo "$RESP" | jget started)" "True" "首次保存后 frpc 已启动"
 assert_eq "$(echo "$RESP" | jget restarted)" "False" "首次保存未触发重启"
 
-assert_contains "$(cat "$TMP/data/config/frpc.toml")" 'remotePort = 18080' "生成的 TOML 含远程端口"
+assert_contains "$(cat "$TMP/data/config/frpc.toml")" 'remotePort = 28080' "生成的 TOML 含远程端口"
 assert_contains "$(cat "$TMP/data/config/frpc.toml")" '[[proxies]]' "生成的 TOML 含代理段"
 
 echo "==> 用例 5：等待隧道 running"
@@ -144,7 +150,7 @@ echo "==> 用例 6：新增隧道走热重载（不重启进程）"
 python3 - "$TMP/cfg.json" >"$TMP/cfg2.json" <<'PY'
 import json, sys
 c = json.load(open(sys.argv[1]))
-c["proxies"].append({"name": "dns", "type": "udp", "localIP": "127.0.0.1", "localPort": 53, "remotePort": 15353})
+c["proxies"].append({"name": "dns", "type": "udp", "localIP": "127.0.0.1", "localPort": 53, "remotePort": 25353})
 print(json.dumps(c))
 PY
 RESP=$(curl -s -b "$CJ" -X PUT -H 'Content-Type: application/json' -H 'X-Requested-With: frpc-qnap' \
@@ -183,7 +189,11 @@ echo
 echo "==> 结果：$pass_count 通过，$fail_count 失败"
 [ "$fail_count" -eq 0 ] || {
 	echo "--- manager.log ---"
-	tail -30 "$TMP/mgr.log" 2>/dev/null || true
+	tail -20 "$TMP/mgr.log" 2>/dev/null || true
+	echo "--- frpc.log ---"
+	tail -25 "$TMP/data/logs/frpc.log" 2>/dev/null || true
+	echo "--- frps.log ---"
+	tail -10 "$TMP/frps.log" 2>/dev/null || true
 	exit 1
 }
 exit 0

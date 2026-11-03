@@ -44,7 +44,11 @@ cross:
 	echo "==> 交叉编译 $$ga"; \
 	GOOS=linux GOARCH=$$ga CGO_ENABLED=0 go build -trimpath \
 		-ldflags "$(LDFLAGS)" -o package/$(ARCH)/$(BIN) ./cmd/frpc-qnap-manager && \
-	sh scripts/fetch-frp.sh $(FRP_VERSION) $$ga package/$(ARCH)
+	if [ -x package/$(ARCH)/frpc ]; then \
+		echo "==> package/$(ARCH)/frpc 已存在，跳过下载"; \
+	else \
+		sh scripts/fetch-frp.sh $(FRP_VERSION) $$ga package/$(ARCH); \
+	fi
 
 web:
 	rm -rf package/shared/web

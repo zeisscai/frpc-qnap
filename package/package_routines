@@ -22,8 +22,10 @@ pkg_check_requirement() {
 
 pkg_pre_install() {
 	# 升级时先停掉正在运行的实例，避免文件被占用。
-	if [ -x "${SYS_QPKG_DIR}/frpc-qnap.sh" ]; then
-		"${SYS_QPKG_DIR}/frpc-qnap.sh" stop >/dev/null 2>&1
+	STOP_SCRIPT="/etc/init.d/frpc-qnap.sh"
+	[ -x "${STOP_SCRIPT}" ] || STOP_SCRIPT="${SYS_QPKG_DIR}/frpc-qnap.sh"
+	if [ -x "${STOP_SCRIPT}" ]; then
+		"${STOP_SCRIPT}" stop >/dev/null 2>&1
 	fi
 	return 0
 }
@@ -53,8 +55,8 @@ pkg_post_install() {
 }
 
 PKG_PRE_REMOVE="{
-	if [ -x \"${SYS_QPKG_DIR}/frpc-qnap.sh\" ]; then
-		\"${SYS_QPKG_DIR}/frpc-qnap.sh\" stop >/dev/null 2>&1
+	if [ -x /etc/init.d/frpc-qnap.sh ]; then
+		/etc/init.d/frpc-qnap.sh stop >/dev/null 2>&1
 	fi
 }"
 

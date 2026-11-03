@@ -508,3 +508,46 @@ grep -rn "hello\|7911" /etc/config/apache/ | head
 - frp 客户端热重载与管理 API：https://gofrp.org/zh-cn/docs/features/common/client/
 - frp 最新版本：v0.71.1（2026-10-14），Apache-2.0
 - 历史同类 QPKG（2019，nasyun）：直接用 7400 端口开 AdminUI，无认证、丢 token —— 本方案主要要解决的问题
+
+---
+
+## 12. 原型实现状态（2026-11-03 更新）
+
+原型已落地并跑通，代码在同仓库。本节记录"方案 → 实现"的偏差，供后续决策参考。
+
+### 12.1 已完成
+
+| 模块 | 状态 | 说明 |
+|---|---|---|
+| Go 管理器 | ✅ | 配置模型 / 校验 / TOML 生成 / 子进程守护 / REST API / 会话认证 |
+| 前端 | ✅ | 概览、隧道、设置、日志四页；原生 ES 模块，无构建步骤 |
+| QPKG 打包源 | ✅ | `qpkg.cfg`、`package_routines`、启停脚本、图标、默认配置 |
+| 构建脚本 | ✅ | `make arm64` 交叉编译 + `fetch-frp.sh` 校验 sha256 |
+| 回归测试 | ✅ | `scripts/e2e.sh`，拉起本地 frps 跑 23 项断言，连续两轮全绿 |
+| ARM64 产物 | ✅ | manager 6.3 MB + frpc 14 MB，均为静态链接 ELF |
+
+### 12.2 与评估稿的偏差
+
+| 评估稿 | 实际实现 | 原因 |
+|---|---|---|
+| Vue3 + Vite | 原生 ES 模块（无构建） | 打包链不需要 Node，改文件即生效；对四页规模足够 |
+| 单包/双包待定 | 每架构独立包 | 按你的要求固定为"一架构一包" |
+| x86_64 同步产出 | 先只出 arm_64 | 你只有 ARM 机器；`make x86_64` 与 `--build-arch` 已就绪，未实机验证 |
+| 未提及 QPKG 图标 | `scripts/make-icon.py` 生成 64×64 PNG | App Center 需要有图标，顺手做了 |
+| 未提及 CSRF | 写操作要求 `X-Requested-With` | 代理路径可能无 QTS 登录态，必须自带防护 |
+
+### 12.3 实现期发现的坑（已修）
+
+1. **`/api/reload` 返回空响应体**：frpc 成功时是 `200 + 空 body`，按 JSON 解析会误判失败并触发多余重启。已改为不解析响应体。
+2. **静态首页 301 死循环**：把 `/` 改写成 `/index.html` 交给 `http.FileServer` 会被 301 回 `/`。已改用 `http.ServeFileFS`。
+3. **`loginFailExit` 默认值**：frp 默认 `true`，frps 不可达时 frpc 直接退出，靠守护进程反复拉起（日志刷、重启计数涨）。本项目默认改为 `false`，让 frpc 自己重连。
+4. **frpc 状态值不止 `error`**：还有 `start error`（如 frps 未配 vhost、remotePort 被占）。状态统计与 UI 已按"包含 error 即异常"处理。
+5. **macOS AirPlay 占用 7000 端口**：本机联调时 frps 起不来，e2e 已改用 17000/28080 等冷门端口，避免与演示环境互相干扰。
+
+### 12.4 下一步（按优先级）
+
+1. **真机 Phase 0**：验证 QTS 代理前缀行为、桌面窗口、重启自愈、未签名安装
+2. 管理员改密页面（后端 PBKDF2 已就绪，缺 UI）
+3. `[[visitors]]` 访问端（stcp/xtcp/sudp 的 client 侧）
+4. manager 监听端口冲突时的自动顺延（当前只有 frpc 管理端口会顺延）
+5. 可选：单包多架构（`qbuild --build-arch` 重复传参）
