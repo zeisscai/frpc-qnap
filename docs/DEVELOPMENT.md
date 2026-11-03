@@ -183,3 +183,4 @@ e2e 占用 17911 / 17400 / 17000 等冷门端口，避免与本机演示环境�
 - [`troubleshooting-install.md`](troubleshooting-install.md) —— 安装失败排查
 - [`records/2026-11-03-worklog.md`](records/2026-11-03-worklog.md) —— 第一轮开发时间线与决策依据
 - [`records/2026-11-03-wsl-env.md`](records/2026-11-03-wsl-env.md) —— WSL 打包链验证与实跑结果
+- [`records/2026-11-03-install-blocker.md`](records/2026-11-03-install-blocker.md) —— 真机安装失败排查全过程（含四个二分变体）

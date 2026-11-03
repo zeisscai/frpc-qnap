@@ -11,11 +11,16 @@
 
 - 上游内核：frp v0.71.1，**不修改源码**，直接用官方 release 二进制
 - 目标架构：`arm_64`（用户只有 ARM 机型）；`x86_64` 构建链已就绪但未实机验证
-- 当前状态：**已产出可分发 QPKG（`dist/frpc-qnap_1.0.1_arm_64.qpkg`，8.71 MB），但还没在真 NAS 上装过**
+- 当前状态：**包能正常产出，但真机安装被 App Center 前置校验拒绝**（TS-428 / QTS 5.2.11，只回一句
+  「无法安装程序包」，无日志）。已二分到「元数据 vs 载荷」两条轴，四个诊断变体待验证。
 
-**只剩一件事没有任何证据：装到真 NAS 上的表现**（HANDOFF §5 Phase 0 六条），其中最关键的是
+**当前唯一阻塞：安装失败**。已确认包结构合法、签名策略与架构均排除（官方模板包在同机能装），
+详见 [`docs/records/2026-11-03-install-blocker.md`](records/2026-11-03-install-blocker.md)，
+排查阶梯与待测变体见 [`docs/troubleshooting-install.md`](troubleshooting-install.md) §6.1。
+
+装成功之后才进入原本的真机 Phase 0（§5 任务 1），其中最关键的是
 **QTS 反向代理会不会剥离 `/frpc-qnap` 前缀**——后端两种都兼容，但没实测过。
-打包侧（`qbuild` 目录约定、包结构、权限、回归）这一轮已经全部拿到证据。
+
 
 
 
@@ -100,13 +105,16 @@ make qpkg        # 内部先跑 scripts/preflight-qpkg.sh，再调 qbuild，产�
 - [x] **`make qpkg` 实跑成功**：WSL Ubuntu 24.04 + QDK 2.5.3 产出 `dist/frpc-qnap_1.0.1_arm_64.qpkg`（8 705 176 B，md5 `f91945c48a12fbc77f845fdb209b9637`），包结构/权限/尾部元数据均已解包核对
 - [x] e2e 回归在 WSL 里复跑：**23/23 通过**
 - [x] `make setup` / `make check`：WSL 环境一键装、打包源预检
+- [x] 安装失败的第一轮排查：确认包结构合法、排除签名/完整性/架构/NAS 环境（官方模板包同机能装），
+      查出两个可疑元数据字段，产出四个二分变体（`docs/records/2026-11-03-install-blocker.md`）
 
 ### 未完成（按优先级）
 
-1. **真机 Phase 0**（见第 5 节）—— 阻塞一切发布
-2. 管理员改密页面（后端 PBKDF2 已就绪，缺 UI；口令只能靠 `initial-password.txt`）
-3. `[[visitors]]` 支持（stcp/xtcp/sudp 的**访问端**，目前只支持服务端）
-4. manager 监听端口（7911）冲突时自动顺延（现在只有 frpc 管理端口会顺延）
+1. **真机安装尚未成功**（见第 5 节任务 1 与 `docs/troubleshooting-install.md` §6.1）—— 阻塞一切发布
+2. 安装成功后的 Phase 0 六项（代理前缀、桌面窗口、重启自愈、端口占用）
+3. 管理员改密页面（后端 PBKDF2 已就绪，缺 UI；口令只能靠 `initial-password.txt`）
+4. `[[visitors]]` 支持（stcp/xtcp/sudp 的**访问端**，目前只支持服务端）
+5. manager 监听端口（7911）冲突时自动顺延（现在只有 frpc 管理端口会顺延）
 
 ---
 
@@ -138,9 +146,23 @@ make qpkg       # 预检 + qbuild
 详细证据见 `docs/records/2026-11-03-wsl-env.md` §6。若换环境后 `qbuild` 报新错，
 把完整输出补进该文档 §6，并同步第 7 节。
 
-### 任务 1：真机 Phase 0（最高优先级）
+### 任务 1：定位「无法安装程序包」（当前阻塞，最高优先级）
 
-包已经有了，装到 NAS，然后逐条验证：
+现象与已排除项见 [`records/2026-11-03-install-blocker.md`](records/2026-11-03-install-blocker.md)，
+诊断包阶梯见 [`troubleshooting-install.md`](troubleshooting-install.md) §6.1。
+
+| 步骤 | 动作 | 判据 |
+|---|---|---|
+| 1 | 依次试装 `dist/diag/C1` → `C2` → `A` → `B`（**文件名不能改**） | 试到能装就停，记录是哪个变体 |
+| 2 | 每次装完看 `/tmp/frpc-qnap-install.log` | 文件存在 → 进了安装流程；不存在 → 前置拒绝，锁元数据 |
+| 3 | 定位后修正 `package/qpkg.cfg`，版本号 +1 重新出包 | 正式包能装即通过 |
+| 4 | 在 `preflight-qpkg.sh` 补一条元数据字段检查，防止回归 | 该字段再出现时预检直接报错 |
+
+优先级说明：安装都装不上，后面的 Phase 0 无从谈起。
+
+### 任务 2：真机 Phase 0
+
+包能装之后再逐条验证：
 
 | # | 验证项 | 命令 / 动作 | 通过标准 |
 |---|---|---|---|
@@ -153,13 +175,14 @@ make qpkg       # 预检 + qbuild
 
 验收后请把第 3 条的实测结果写进 `docs/frpc-qnap-方案评估.md` §12，并更新 README 的「待实机验证」。
 
-### 任务 2：改密页面
+### 任务 3：改密页面
 
 - 后端已有 `Auth.SetPassword`（PBKDF2 120k 轮），`state.json` 存 hash
 - 需要：`POST /api/password`（旧密码 + 新密码）+ 设置页一个卡片
+- 顺带修掉 `server.go` 里 `initial-password.txt` 那句「登录后请立即在设置中修改」（当前没有改密 UI）
 - 验收：改密后旧会话失效、新口令能登录、重启后仍生效
 
-### 任务 3：visitors
+### 任务 4：visitors
 
 - 现在 `Proxy` 结构只映射 `[[proxies]]`，需要区分 role
 - frp 的访问端是 `[[visitors]]`：`name/type/serverName/secretKey/bindAddr/bindPort`
@@ -272,6 +295,7 @@ make setup && make arm64 && make qpkg
 - `docs/troubleshooting-install.md` —— **装不上时先看这里**：无提示无日志的排查阶梯、安装轨迹判据、对照实验
 - `docs/records/2026-11-03-worklog.md` —— 第一轮的开发时间线、决策依据、验证数据
 - `docs/records/2026-11-03-wsl-env.md` —— 第二轮：打包链静态验证、`QPKG_CONFIG` 缺陷的证据与复现、WSL 环境坑
+- `docs/records/2026-11-03-install-blocker.md` —— **第三轮：真机安装失败的全过程记录**（做过什么、排除了什么、还差什么）
 - `docs/records/memory-2026-11-03.md` —— 开发过程中的原始工作记忆（按阶段追加，未整理）
 - `README.md` —— 面向使用者的构建与安装说明
 - `handoff/` —— 源码快照压缩包（离线备份，非必需）

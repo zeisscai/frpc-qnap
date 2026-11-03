@@ -527,6 +527,7 @@ grep -rn "hello\|7911" /etc/config/apache/ | head
 | 回归测试 | ✅ | `scripts/e2e.sh`，拉起本地 frps 跑 23 项断言，连续两轮全绿 |
 | ARM64 产物 | ✅ | manager ≈6.5 MB + frpc ≈15 MB，均为静态链接 ELF |
 | 打包链 | ✅ | WSL（Ubuntu 24.04 + QDK 2.5.3）实跑 `make qpkg` 成功，产出 8.71 MB ARM64 包；包结构、权限、尾部元数据已解包核对（`records/2026-11-03-wsl-env.md` §6） |
+| 真机安装 | ❌ | TS-428 / QTS 5.2.11 手动安装只回「无法安装程序包」，无日志；包结构合法、签名与架构已排除（官方模板包同机能装），正在二分元数据字段（`records/2026-11-03-install-blocker.md`） |
 
 ### 12.2 与评估稿的偏差
 
